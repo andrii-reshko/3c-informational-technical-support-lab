@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prom_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - playground_default
+
+  # because arm64 sucks :)
+  docker-proxy:
+    image: alpine/socat
+    container_name: docker-proxy
+    networks:
+      - playground_default
+    command: tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: always
+
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    ports:
+      - "9273:9273"
+    restart: unless-stopped
+    networks:
+      - playground_default
+
+  test-node-01:
+    build:
+      context: ./stress-server
+    container_name: test-node-01
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    environment:
+      - CPU_LOAD_ITERATIONS=500000000
+      - MEM_LOAD_MB=64
+      - MAX_DELAY_MS=200
+    networks:
+      - playground_default
+    ports:
+      - "9101:80"
+    restart: unless-stopped
+
+  test-node-02:
+    build:
+      context: ./stress-server
+    container_name: test-node-02
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+    environment:
+      - CPU_LOAD_ITERATIONS=50000000
+      - MEM_LOAD_MB=32
+      - MAX_DELAY_MS=200
+    networks:
+      - playground_default
+    ports:
+      - "9102:80"
+    restart: unless-stopped
+
+networks:
+  playground_default:
+    driver: bridge
