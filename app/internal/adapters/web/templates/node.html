@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node {{.NodeName}} - AI Predictor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/ui/static/app.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="container-fluid main-container">
+
+    <div id="node-details-view" class="active">
+        <div class="row details-header align-items-center mb-4">
+            <div class="col-auto">
+                <a href="/ui" class="btn btn-outline-secondary btn-sm">&larr; Back</a>
+            </div>
+            <div class="col">
+                <h1 class="h2 fw-bold m-0 d-inline-block me-3">Node: <span id="details-node-name">{{.NodeName}}</span></h1>
+                {{if eq .Risk "CRITICAL"}}
+                <span class="status-badge status-critical align-middle" id="details-node-status">{{.Risk}}</span>
+                {{else if eq .Risk "WARNING"}}
+                <span class="status-badge status-warning align-middle" id="details-node-status">{{.Risk}}</span>
+                {{else}}
+                <span class="status-badge status-safe align-middle" id="details-node-status">{{.Risk}}</span>
+                {{end}}
+                <span class="badge text-bg-secondary ws-badge ms-2" id="ws-status">WS: connecting...</span>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-xl-4">
+                <div class="hardware-config">
+                    <div class="usage-label m-0">Hardware Configuration</div>
+                    <div class="fw-bold text-dark">{{printf "%.1f" .CPUCores}} Cores | {{printf "%.1f" .RAMGB}} GB RAM</div>
+                    <div class="small text-muted mt-1">Safe Boundary: {{printf "%.0f" .SafeBoundary}}%</div>
+                </div>
+
+                <div class="current-load-big card-flat text-center p-3 mb-3">
+                    <div class="usage-label">Current Load (CPU / RAM)</div>
+                    <span id="cur-cpu" class="{{if eq .Risk "CRITICAL"}}text-danger{{else if eq .Risk "WARNING"}}text-warning{{else}}text-success{{end}}">{{printf "%.1f" .CurrentCPU}}%</span> / 
+                    <span id="cur-ram" class="text-secondary">{{printf "%.1f" .CurrentRAM}}%</span>
+                </div>
+
+                <div class="card card-flat p-3 mt-3">
+                    <div class="usage-label mb-2">Forecast Details ({{.Horizon}}m)</div>
+                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span>Predicted Peak:</span>
+                        <strong id="fc-upper">{{printf "%.1f" .UpperBound}}%</strong>
+                    </div>
+                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span>Lower Bound:</span>
+                        <strong id="fc-lower">{{printf "%.1f" .LowerBound}}%</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Headroom:</span>
+                        <strong id="fc-headroom">{{printf "%.1f" .Headroom}}%</strong>
+                    </div>
+                </div>
+
+                <div class="card card-flat p-3 mt-3">
+                    <div class="usage-label mb-2">Quality Metrics</div>
+                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span>MAE:</span>
+                        <strong>{{printf "%.3f" .QualityMAE}}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Coverage:</span>
+                        <strong>{{printf "%.1f" .QualityCoverage}}%</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-8">
+                <div class="card card-flat p-4">
+                    <h3 class="h5 fw-bold m-0">Historical & Predicted Load (CPU)</h3>
+                    <div class="historical-chart-container border-0" id="node-details-chart">
+                    </div>
+                </div>
+
+                <div class="card card-flat p-4 mt-3">
+                    <div id="ws-log-container" class="log-container">
+                        <div class="text-muted">Waiting for data...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+(function() {
+    const initialPoints = {{.ChartJSON}};
+    const NODE_ID   = "{{.NodeID}}";
+    const HORIZON   = {{.Horizon}};
+    
+    // Parse initial data
+    let chartData = initialPoints.map(d => ({ 
+        timestamp: new Date(d.timestamp), 
+        cpuUsage: d.cpu, 
+        quantileLower: d.lower,
+        quantileUpper: d.upper
+    }));
+    
+    let nowTime = new Date("{{.NowISO}}");
+
+    // D3 Configuration
+    const margin = {top: 40, right: 30, bottom: 40, left: 50};
+    const container = document.getElementById("node-details-chart");
+    const width = container.clientWidth - margin.left - margin.right; // Dynamic width
+    const height = 350 - margin.top - margin.bottom;
+
+    d3.select("#node-details-chart").selectAll("*").remove();
+
+    const svg = d3.select("#node-details-chart")
+      .append("svg")
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+      .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Grid & Limit Line
+    const gridGroup = svg.append("g").attr("class", "grid-group");
+
+    svg.append("line")
+      .attr("x1", 0).attr("x2", width)
+      .attr("y1", 0).attr("y2", 0) 
+      .attr("stroke", "#dc3545").attr("stroke-dasharray", "4,4").attr("stroke-width", 1.5);
+
+    svg.append("text")
+      .attr("x", width).attr("y", -10)
+      .attr("text-anchor", "end").attr("fill", "#dc3545")
+      .style("font-size", "12px").style("font-weight", "600")
+      .text("SAFE OPERATING BOUNDARY (100%)");
+
+    const quantileAreaGroup = svg.append("g").attr("class", "quantile-area");
+    const pathGroup = svg.append("g").attr("class", "path");
+    const axesGroup = svg.append("g").attr("class", "axes");
+    const markerGroup = svg.append("g").attr("class", "markers");
+
+    const xScale = d3.scaleTime().range([0, width]);
+    const yScale = d3.scaleLinear().domain([-5, 110]).range([height, 0]);
+
+    if (chartData.length > 0 && chartData.every(d => d.cpuUsage === 0)) {
+        const warning = container.parentNode.appendChild(document.createElement("div"));
+        warning.className = "alert alert-warning mt-2";
+        warning.textContent = "Historical data is 0% (idle node).";
+    }
+
+    const lineGenerator = d3.line()
+      .x(d => xScale(d.timestamp))
+      .y(d => yScale(d.cpuUsage))
+      .curve(d3.curveMonotoneX);
+
+    // Area generator needs to handle the gap between history and forecast?
+    // In PoC logic, forecast is a separate array `currentForecastBounds`.
+    // Here `chartData` contains everything?
+    // Let's separate them for drawing like in PoC.
+    // Actually, `chartData` from Go contains the "fan" points at the end.
+    // So we can just draw the area for the whole dataset?
+    // History points have lower=upper=cpu, so area width is 0. That works!
+    
+    const areaGenerator = d3.area()
+      .x(d => xScale(d.timestamp))
+      .y0(d => yScale(d.quantileLower))
+      .y1(d => yScale(d.quantileUpper))
+      .curve(d3.curveMonotoneX);
+
+    function redraw() {
+        if (chartData.length < 2) return;
+        
+        // 1. Update Domain
+        const startTime = new Date(nowTime.getTime() - 60 * 60 * 1000);
+        const forecastTime = new Date(nowTime.getTime() + HORIZON * 60 * 1000);
+        xScale.domain([startTime, forecastTime]);
+
+        // 2. Draw Area (Cloud)
+        // We only want to draw cloud for the future part mainly, but drawing it all is fine 
+        // since history has 0 width.
+        const quantileArea = quantileAreaGroup.selectAll(".quantile-path").data([chartData]);
+        quantileArea.enter().append("path").attr("class", "quantile-path")
+          .merge(quantileArea)
+          .attr("d", areaGenerator)
+          .attr("fill", "#0d6efd")
+          .attr("opacity", 0.15);
+        quantileArea.exit().remove();
+
+        // 3. Draw Line (History + Predicted Mean)
+        // We usually want the line to be solid for history and maybe dashed for future?
+        // PoC drew history line. Forecast was just cloud.
+        // Let's split data.
+        const historyOnly = chartData.filter(d => d.timestamp <= nowTime);
+        
+        const historicalPath = pathGroup.selectAll(".historical-path").data([historyOnly]);
+        historicalPath.enter().append("path").attr("class", "historical-path")
+          .merge(historicalPath)
+          .attr("d", lineGenerator)
+          .attr("fill", "none")
+          .attr("stroke", "#0d6efd")
+          .attr("stroke-width", 2.5);
+        historicalPath.exit().remove();
+
+        // 3a. Draw Forecast Lines (Dashed for Lower/Upper)
+        const forecastOnly = chartData.filter(d => d.timestamp >= nowTime);
+
+        const lowerLineGen = d3.line()
+            .x(d => xScale(d.timestamp))
+            .y(d => yScale(d.quantileLower))
+            .curve(d3.curveMonotoneX);
+
+        const upperLineGen = d3.line()
+            .x(d => xScale(d.timestamp))
+            .y(d => yScale(d.quantileUpper))
+            .curve(d3.curveMonotoneX);
+
+        const lowerPath = pathGroup.selectAll(".forecast-lower-path").data([forecastOnly]);
+        lowerPath.enter().append("path").attr("class", "forecast-lower-path")
+            .merge(lowerPath)
+            .attr("d", lowerLineGen)
+            .attr("fill", "none")
+            .attr("stroke", "#0d6efd")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5,5");
+        lowerPath.exit().remove();
+
+        const upperPath = pathGroup.selectAll(".forecast-upper-path").data([forecastOnly]);
+        upperPath.enter().append("path").attr("class", "forecast-upper-path")
+            .merge(upperPath)
+            .attr("d", upperLineGen)
+            .attr("fill", "none")
+            .attr("stroke", "#0d6efd")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5,5");
+        upperPath.exit().remove();
+
+        // 4. Axes
+        const xAxis = d3.axisBottom(xScale).ticks(d3.timeMinute.every(15)).tickFormat(d3.timeFormat("%H:%M"));
+        const yAxis = d3.axisLeft(yScale).ticks(5);
+
+        const yGrid = d3.axisLeft(yScale).tickSize(-width).tickFormat('').ticks(5);
+        gridGroup.call(yGrid).selectAll("line").attr("stroke", "#e9ecef").attr("stroke-dasharray", "2,2");
+        gridGroup.select(".domain").remove();
+
+        axesGroup.selectAll(".x-axis").data([null]).enter().append("g").attr("class", "x-axis");
+        axesGroup.selectAll(".y-axis").data([null]).enter().append("g").attr("class", "y-axis");
+        
+        axesGroup.select(".x-axis").attr("transform", `translate(0,${height})`).call(xAxis);
+        axesGroup.select(".y-axis").call(yAxis);
+
+        // 5. Marker "Now"
+        const nowMarker = markerGroup.selectAll(".now-marker").data([nowTime]);
+        nowMarker.enter().append("line").attr("class", "now-marker")
+          .attr("stroke", "#212529").attr("stroke-width", 2)
+          .merge(nowMarker)
+          .attr("x1", xScale(nowTime)).attr("y1", yScale(100))
+          .attr("x2", xScale(nowTime)).attr("y2", yScale(0));
+        
+        const nowText = markerGroup.selectAll(".now-text").data([nowTime]);
+        nowText.enter().append("text").attr("class", "now-text")
+          .attr("fill", "#212529").style("font-size", "10px").style("font-weight", "600").attr("text-anchor", "middle")
+          .merge(nowText)
+          .attr("x", xScale(nowTime)).attr("y", height + 30)
+          .text("CURRENT TIME");
+    }
+
+    redraw();
+
+    // WebSocket Logic
+    var wsProto = location.protocol === "https:" ? "wss" : "ws";
+    var ws = new WebSocket(wsProto + "://" + location.host + "/ws?node_id=" + encodeURIComponent(NODE_ID) + "&interval_sec=2");
+    var wsBadge = document.getElementById("ws-status");
+    var logContainer = document.getElementById("ws-log-container");
+    var logs = [];
+    const maxLogs = 10;
+
+    function renderLogs() {
+        if (logs.length === 0) {
+            logContainer.innerHTML = '<div class="text-muted">Waiting for data...</div>';
+            return;
+        }
+        logContainer.innerHTML = logs.map(l => 
+            `<div class="log-entry"><span class="log-time">[${l.time}]</span> ${l.msg}</div>`
+        ).join('');
+    }
+
+    ws.onopen  = function() { wsBadge.textContent = "WS: live";   wsBadge.className = "badge text-bg-success ws-badge ms-2"; };
+    ws.onclose = function() { wsBadge.textContent = "WS: closed"; wsBadge.className = "badge text-bg-danger  ws-badge ms-2"; };
+    ws.onerror = function() { wsBadge.textContent = "WS: error";  wsBadge.className = "badge text-bg-danger  ws-badge ms-2"; };
+
+    ws.onmessage = function(ev) {
+        var p;
+        try { p = JSON.parse(ev.data); } catch(_) { return; }
+
+        // --- Add to Log ---
+        var now = new Date();
+        var timeStr = now.toLocaleTimeString();
+        var msg = `CPU: ${p.cpu.toFixed(2)}%, Lower: ${p.lower.toFixed(2)}%, Upper: ${p.upper.toFixed(2)}%`;
+        
+        logs.unshift({ time: timeStr, msg: msg });
+        if (logs.length > maxLogs) {
+            logs.pop();
+        }
+        renderLogs();
+        // ------------------
+
+        var ts = new Date(p.timestamp);
+        nowTime = new Date(p.now_iso || p.timestamp);
+
+        // Remove future points from chartData to replace them
+        // Actually, we need to rebuild the forecast part.
+        // Step 1: Filter history up to 'now'
+        // But 'now' moves forward.
+        // We add the NEW history point.
+        
+        // Remove points that are newer than the received timestamp (shouldn't happen for history, but clean up old forecast)
+        chartData = chartData.filter(d => d.timestamp < ts);
+        
+        // Add current point (History)
+        chartData.push({ 
+            timestamp: ts, 
+            cpuUsage: p.cpu, 
+            quantileLower: p.cpu, 
+            quantileUpper: p.cpu 
+        });
+
+        // Add Forecast Fan
+        // Interpolate from current (p.cpu) to target (p.lower, p.upper) at NOW + HORIZON
+        var steps = [
+          { min: HORIZON / 3,     frac: 1/3 },
+          { min: 2 * HORIZON / 3, frac: 2/3 },
+          { min: HORIZON,          frac: 1   }
+        ];
+        
+        steps.forEach(function(s) {
+          chartData.push({
+            timestamp: new Date(nowTime.getTime() + s.min * 60000),
+            cpuUsage:   p.cpu + (0 /* target mean? usually between lower/upper, say avg */ - 0) * s.frac, // Simplified: line stops at history
+            // Wait, we want the cloud.
+            // Let's say mean prediction is average of lower/upper or just not plotted.
+            // We just plot the cloud area.
+            quantileLower: p.cpu + (p.lower - p.cpu) * s.frac,
+            quantileUpper: p.cpu + (p.upper - p.cpu) * s.frac
+          });
+        });
+
+        // Trim old history (keep last 60 mins)
+        var cutoff = new Date(nowTime.getTime() - 65 * 60000);
+        chartData = chartData.filter(d => d.timestamp > cutoff);
+
+        // Update UI Text
+        document.getElementById("cur-cpu").textContent = p.cpu.toFixed(1) + "%";
+        if (p.ram !== undefined) {
+             document.getElementById("cur-ram").textContent = p.ram.toFixed(1) + "%";
+        }
+        document.getElementById("fc-lower").textContent = p.lower.toFixed(1) + "%";
+        document.getElementById("fc-upper").textContent = p.upper.toFixed(1) + "%";
+        
+        let headroom = Math.max(0, 100 - p.upper);
+        document.getElementById("fc-headroom").textContent = headroom.toFixed(1) + "%";
+
+        redraw();
+    };
+
+})();
+</script>
+</body>
+</html>

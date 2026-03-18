@@ -1,0 +1,11 @@
+.idea
+.DS_Store
+
+artifacts/*
+!artifacts/.gitkeep
+data/*
+!data/.gitkeep
+
+.venv
+.env
+__pycache__/
