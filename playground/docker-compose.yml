@@ -42,10 +42,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: '0.2'
           memory: 128M
     environment:
-      - CPU_LOAD_ITERATIONS=500000000
+      - CPU_LOAD_ITERATIONS=5000000000
       - MEM_LOAD_MB=64
       - MAX_DELAY_MS=200
     networks:
@@ -61,11 +61,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: '0.15'
           memory: 64M
     environment:
       - CPU_LOAD_ITERATIONS=50000000
-      - MEM_LOAD_MB=32
+      - MEM_LOAD_MB=64
       - MAX_DELAY_MS=200
     networks:
       - playground_default

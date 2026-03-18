@@ -19,6 +19,21 @@ func main() {
 	maxDelay, _ := strconv.Atoi(getEnv("MAX_DELAY_MS", "0"))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Перезаписуємо з параметрів запиту, якщо вони є
+		cpuLoadParam := r.URL.Query().Get("cpu")
+		memLoadParam := r.URL.Query().Get("mem")
+		delayParam := r.URL.Query().Get("delay")
+
+		if cpuLoadParam != "" {
+			cpuLoad, _ = strconv.Atoi(cpuLoadParam)
+		}
+		if memLoadParam != "" {
+			memLoad, _ = strconv.Atoi(memLoadParam)
+		}
+		if delayParam != "" {
+			maxDelay, _ = strconv.Atoi(delayParam)
+		}
+
 		// 1. Емуляція випадкової затримки
 		if maxDelay > 0 {
 			delay := rand.Intn(maxDelay)
@@ -27,8 +42,7 @@ func main() {
 
 		// 2. Емуляція навантаження на CPU (паралельна обробка)
 		if cpuLoad > 0 {
-			numWorkers := runtime.NumCPU()
-			iterationsPerWorker := cpuLoad / numWorkers
+			numWorkers := runtime.NumCPU() * 2
 
 			var wg sync.WaitGroup
 			wg.Add(numWorkers)
@@ -36,10 +50,12 @@ func main() {
 			for w := 0; w < numWorkers; w++ {
 				go func() {
 					defer wg.Done()
-					// Кожен воркер виконує свою частину ітерацій
-					for i := 0; i < iterationsPerWorker; i++ {
-						_ = math.Sqrt(float64(i))
+					// Кожен воркер виконує ВСІ ітерації (не ділимо)
+					sum := 0.0
+					for i := 0; i < cpuLoad; i++ {
+						sum += math.Sin(float64(i)) * math.Cos(float64(i))
 					}
+					_ = sum
 				}()
 			}
 			wg.Wait()

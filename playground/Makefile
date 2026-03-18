@@ -8,3 +8,6 @@ down:
 	docker-compose down
 
 restart: down up
+
+load:
+	./load.sh
