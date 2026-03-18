@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Server Load Predictor (MVP)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/ui/static/app.css" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .sparkline {
+            width: 100%;
+            height: 50px;
+            overflow: hidden;
+        }
+        .node-card-body {
+            padding: 1rem;
+        }
+        .metric-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        .metric-label {
+            font-size: 0.75rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .node-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0;
+            color: #212529;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid main-container">
+    <div class="row details-header align-items-center mb-4">
+        <div class="col d-flex align-items-center">
+            <h1 class="h2 fw-bold m-0">Server Fleet Dashboard</h1>
+            <span class="badge text-bg-secondary ws-badge ms-3" id="ws-status">WS: connecting...</span>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+        {{range .Nodes}}
+        <div class="col">
+            <a href="/ui/nodes/{{.ID}}" class="card node-card h-100 text-decoration-none">
+                <div class="node-card-header d-flex justify-content-between align-items-center">
+                    <h2 class="node-name text-truncate" title="{{.Name}}">{{.Name}}</h2>
+                    {{if eq .Risk "CRITICAL"}}
+                    <span id="badge-{{.ID}}" class="status-badge status-critical">{{.Risk}}</span>
+                    {{else if eq .Risk "WARNING"}}
+                    <span id="badge-{{.ID}}" class="status-badge status-warning">{{.Risk}}</span>
+                    {{else}}
+                    <span id="badge-{{.ID}}" class="status-badge status-safe">{{.Risk}}</span>
+                    {{end}}
+                </div>
+                <div class="node-card-body">
+                    <div class="row align-items-end mb-3">
+                        <div class="col-4 border-end">
+                            <div class="metric-label">CPU</div>
+                            <div class="metric-value text-body" id="cpu-{{.ID}}">{{printf "%.0f" .CPU}}%</div>
+                        </div>
+                        <div class="col-4 border-end text-center">
+                             <div class="metric-label">Pred ({{.Horizon}}m)</div>
+                             <div class="metric-value text-body" id="pred-{{.ID}}">
+                                 {{printf "%.0f" .PredictedLower}}-{{printf "%.0f" .PredictedUpper}}%
+                             </div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <div class="metric-label">RAM</div>
+                            <div class="metric-value text-body" id="ram-{{.ID}}">{{printf "%.0f" .RAM}}%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="sparkline" id="spark-{{.ID}}"></div>
+                </div>
+            </a>
+            <script>
+                (function() {
+                    const data = {{.SparkJSON}};
+                    if (!data || data.length < 2) return;
+                    
+                    const containerId = "spark-{{.ID}}";
+                    const container = document.getElementById(containerId);
+                    const width = container.clientWidth;
+                    const height = 50;
+                    
+                    const parsedData = data.map(d => ({
+                        timestamp: new Date(d.timestamp),
+                        value: d.cpu
+                    }));
+
+                    const svg = d3.select("#" + containerId)
+                        .append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .attr("viewBox", `0 0 ${width} ${height}`);
+                        
+                    const x = d3.scaleTime()
+                        .domain(d3.extent(parsedData, d => d.timestamp))
+                        .range([0, width]);
+                        
+                    const y = d3.scaleLinear()
+                        .domain([0, 100])
+                        .range([height, 0]);
+                        
+                    const line = d3.line()
+                        .x(d => x(d.timestamp))
+                        .y(d => y(d.value))
+                        .curve(d3.curveMonotoneX);
+                        
+                    const area = d3.area()
+                        .x(d => x(d.timestamp))
+                        .y0(height)
+                        .y1(d => y(d.value))
+                        .curve(d3.curveMonotoneX);
+                        
+                    svg.append("path")
+                        .datum(parsedData)
+                        .attr("fill", "#e9ecef")
+                        .attr("d", area);
+                        
+                    svg.append("path")
+                        .datum(parsedData)
+                        .attr("fill", "none")
+                        .attr("stroke", "#0d6efd")
+                        .attr("stroke-width", 2)
+                        .attr("d", line);
+                })();
+            </script>
+        </div>
+        {{else}}
+        <div class="col-12">
+            <div class="alert alert-secondary">No nodes with available forecast.</div>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function() {
+        var wsProto = location.protocol === "https:" ? "wss" : "ws";
+        var ws = new WebSocket(wsProto + "://" + location.host + "/ws?interval_sec=2");
+        var wsBadge = document.getElementById("ws-status");
+
+        ws.onopen  = function() { wsBadge.textContent = "WS: live";   wsBadge.className = "badge text-bg-success ws-badge ms-3"; };
+        ws.onclose = function() { wsBadge.textContent = "WS: closed"; wsBadge.className = "badge text-bg-danger  ws-badge ms-3"; };
+        ws.onerror = function() { wsBadge.textContent = "WS: error";  wsBadge.className = "badge text-bg-danger  ws-badge ms-3"; };
+
+        ws.onmessage = function(ev) {
+            var list;
+            try { list = JSON.parse(ev.data); } catch(_) { return; }
+            if (!Array.isArray(list)) return;
+
+            list.forEach(function(node) {
+                // Update Badge
+                var badge = document.getElementById("badge-" + node.id);
+                if (badge) {
+                    badge.textContent = node.risk;
+                    var cls = "status-badge ";
+                    if (node.risk === "CRITICAL") cls += "status-critical";
+                    else if (node.risk === "WARNING") cls += "status-warning";
+                    else cls += "status-safe";
+                    badge.className = cls;
+                }
+
+                // Update CPU
+                var cpu = document.getElementById("cpu-" + node.id);
+                if (cpu) cpu.textContent = node.cpu.toFixed(0) + "%";
+
+                // Update RAM
+                var ram = document.getElementById("ram-" + node.id);
+                if (ram) ram.textContent = node.ram.toFixed(0) + "%";
+
+                // Update Prediction Range
+                var pred = document.getElementById("pred-" + node.id);
+                if (pred) {
+                    pred.textContent = node.pred_lower.toFixed(0) + "-" + node.pred_upper.toFixed(0) + "%";
+                }
+            });
+        };
+    })();
+</script>
+</body>
+</html>

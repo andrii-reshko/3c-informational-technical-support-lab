@@ -1,0 +1,21 @@
+# Database files
+metrics.db
+metrics.db-*
+
+# Ignore exported csv files
+*.csv
+
+# Ignore log files
+*.log
+
+# Ignore artifacts
+/build
+/dist
+models/*.json
+models/*.tflite
+
+
+# Apple silicon wtf?
+.DS_Store
+c/*/
+libtflite

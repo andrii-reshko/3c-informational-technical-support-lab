@@ -1,0 +1,45 @@
+body { font-family: 'Inter', sans-serif; background-color: #f4f6f9; color: #333; }
+.main-container { padding: 2rem; }
+.node-card { background-color: #fff; border: 1px solid #e1e8ed; border-radius: 4px; overflow: hidden; text-decoration: none; color: inherit; display: block; }
+.node-card:hover { border-color: #ced4da; color: inherit; }
+.node-card-header { padding: 1rem 1.25rem; border-bottom: 1px solid #f0f0f0; background-color: #fff; }
+.node-name { font-weight: 700; font-size: 1.1rem; margin: 0; }
+.node-card-body { padding: 1.25rem; }
+.usage-label { font-size: 0.85rem; color: #6c757d; margin-bottom: 0.25rem; }
+.usage-value { font-weight: 600; font-size: 1rem; }
+.historical-chart-container { width: 100%; background-color: #fff; height: 350px; margin-top: 1.5rem; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+.card-flat { background-color: #fff; border: 1px solid #e1e8ed; border-radius: 4px; box-shadow: none; }
+.status-badge { font-weight: 600; font-size: 0.75rem; padding: 0.35em 0.8em; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.status-safe { background-color: #198754; color: #fff; }
+.status-warning { background-color: #ffc107; color: #000; }
+.status-critical { background-color: #dc3545; color: #fff; }
+.hardware-config { background-color: #fff; border: 1px solid #e1e8ed; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem; }
+.current-load-big { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.5rem; }
+.chart-placeholder { color: #ced4da; font-weight: 600; }
+.kpi { font-size: 1.15rem; font-weight: 700; }
+.ws-badge { font-size: .75rem; }
+
+.log-container {
+    background-color: #f8f9fa;
+    color: #495057;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    padding: 1rem;
+    border-radius: 4px;
+    height: 250px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+}
+.log-entry {
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 0.25rem;
+}
+.log-entry:last-child {
+    border-bottom: none;
+}
+.log-time {
+    color: #6c757d;
+    margin-right: 0.5rem;
+    font-weight: 600;
+}
