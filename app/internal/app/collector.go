@@ -9,9 +9,10 @@ import (
 )
 
 type CollectorService struct {
-	nodes    domain.NodeRepository
-	metrics  domain.MetricsRepository
-	provider domain.MetricProvider
+	nodes           domain.NodeRepository
+	metrics         domain.MetricsRepository
+	provider        domain.MetricProvider
+	wasDisconnected bool
 }
 
 func NewCollectorService(
@@ -20,9 +21,10 @@ func NewCollectorService(
 	provider domain.MetricProvider,
 ) *CollectorService {
 	return &CollectorService{
-		nodes:    nodes,
-		metrics:  metrics,
-		provider: provider,
+		nodes:           nodes,
+		metrics:         metrics,
+		provider:        provider,
+		wasDisconnected: false,
 	}
 }
 
@@ -47,12 +49,20 @@ func (s *CollectorService) SyncNodes(ctx context.Context) {
 // Collect використовує MetricsRepository
 func (s *CollectorService) Collect(ctx context.Context) {
 	metrics, err := s.provider.GetLatestMetrics(ctx)
-	for _, m := range metrics {
-		logrus.Debugf("collector: sync node %s, hardware: %.1f%% CPU %d bytes RAM", m.NodeID, m.CPUPercent, m.RAMBytes)
-	}
 	if err != nil {
 		logrus.Errorf("Metrics collection failed: %v", err)
+		s.wasDisconnected = true
 		return
+	}
+
+	if s.wasDisconnected {
+		logrus.Info("collector: connection recovered, triggering backfill")
+		s.Backfill(ctx)
+		s.wasDisconnected = false
+	}
+
+	for _, m := range metrics {
+		logrus.Debugf("collector: sync node %s, hardware: %.1f%% CPU %d bytes RAM", m.NodeID, m.CPUPercent, m.RAMBytes)
 	}
 	if len(metrics) > 0 {
 		if err := s.metrics.SaveMetrics(ctx, metrics); err != nil {

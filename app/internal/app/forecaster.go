@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/andrii-reshko/3c-informational-technical-support-lab/app/internal/adapters/tflite"
@@ -61,26 +62,41 @@ func (s *ForecasterService) PredictForNode(ctx context.Context, nodeID string) (
 	upper := float64(rawOutputs[1]) // q0.9
 	peak := upper                   // Згідно з ТЗ, ми фокусуємося на очікуваному піковому ресурсі
 
-	// 5. ЛОГІКА ВИЗНАЧЕННЯ РИЗИКУ (згідно ТЗ Node Details)
-	risk := "safe"
-	if upper > 80.0 { // Пороги можна винести в конфіг вузла
-		risk = "warning"
+	// 5. ЛОГІКА ВИЗНАЧЕННЯ РИЗИКУ (використовуємо SafeBoundary з вузла)
+	node, err := s.nodeRepo.GetNodeByID(ctx, nodeID)
+	safeBoundary := 75.0
+	if err == nil && node.SafeBoundary > 0 {
+		safeBoundary = node.SafeBoundary
 	}
-	if upper > 90.0 {
+
+	risk := "safe"
+	if upper > safeBoundary {
 		risk = "critical"
 	}
 
 	// 6. ФОРМУВАННЯ ВІДПОВІДІ (з використанням реальних метаданих якості)
+	if s.meta == nil {
+		s.meta = &domain.ModelQuality{Coverage: 0.85, MAE: 0, Horizon: 15}
+	}
+	log.Printf("DEBUG: meta.Coverage=%v MAE=%v Horizon=%v", s.meta.Coverage, s.meta.MAE, s.meta.Horizon)
+	coverageLow := s.meta.Coverage < 0.8
+	upperBoundExceeded := upper > 100.0
+	upperClamped := upper
+	if upper > 100.0 {
+		upperClamped = 100.0
+	}
 	return &domain.ForecastResponse{
-		NodeID:     nodeID,
-		Timestamp:  time.Now().UTC(),
-		HorizonMin: s.meta.Horizon,
-		CurrentCPU: metrics[len(metrics)-1].CPUPercent,
-		LowerBound: lower,
-		UpperBound: upper,
-		Predicted:  peak,
-		RiskLevel:  risk,
-		Headroom:   100.0 - upper,
-		Quality:    *s.meta,
+		NodeID:             nodeID,
+		Timestamp:          time.Now().UTC(),
+		HorizonMin:         s.meta.Horizon,
+		CurrentCPU:         metrics[len(metrics)-1].CPUPercent,
+		LowerBound:         lower,
+		UpperBound:         upperClamped,
+		Predicted:          peak,
+		RiskLevel:          risk,
+		Headroom:           100.0 - upper,
+		Quality:            *s.meta,
+		CoverageLow:        coverageLow,
+		UpperBoundExceeded: upperBoundExceeded,
 	}, nil
 }
