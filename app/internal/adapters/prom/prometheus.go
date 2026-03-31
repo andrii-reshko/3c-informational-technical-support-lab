@@ -126,10 +126,16 @@ func (a *PrometheusAdapter) isSystemContainer(name string) bool {
 func (a *PrometheusAdapter) GetRangeMetrics(ctx context.Context, nodeID string, start, end time.Time) ([]domain.Metric, error) {
 	// 1. Визначаємо крок (Step).
 	// Бажано, щоб він збігався з нашим інтервалом збору (5s).
+	duration := end.Sub(start)
+	step := 5 * time.Second
+	if duration > 0 && duration/step > 10000 {
+		step = duration / 10000
+	}
+
 	queryRange := v1.Range{
 		Start: start,
 		End:   end,
-		Step:  5 * time.Second,
+		Step:  step,
 	}
 
 	// 2. Формуємо запити з фільтром по конкретному контейнеру

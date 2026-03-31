@@ -35,7 +35,7 @@ func main() {
 	// 3. Збираємо сервіси
 	fe := app.NewFeatureEngineer(*model.Scaler)
 	forecaster := app.NewForecasterService(c.NodeRepo, c.MetricsRepo, fe, model.Predictor, model.Meta)
-	handler := http2.NewHandler(forecaster)
+	handler := http2.NewHandler(forecaster, c.NodeRepo)
 	webHandler, err := web.NewHandler(forecaster, c.NodeRepo, c.MetricsRepo)
 	if err != nil {
 		log.Fatalf("inference: failed to init web handler: %v", err)
@@ -44,6 +44,7 @@ func main() {
 	// 4. Налаштовуємо роутинг
 	mux := http.NewServeMux()
 	mux.HandleFunc("/predict", handler.GetPrediction)
+	mux.HandleFunc("/api/nodes", handler.UpdateNode)
 	mux.HandleFunc("/ui", webHandler.Dashboard)
 	mux.HandleFunc("/ui/", func(w http.ResponseWriter, r *http.Request) {
 		switch {

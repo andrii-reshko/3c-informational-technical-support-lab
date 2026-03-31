@@ -21,10 +21,10 @@ func NewNodeRepository(db *sqlx.DB) domain.NodeRepository {
 }
 
 func (r *nodeRepo) UpsertNode(ctx context.Context, n domain.Node) error {
-	query := `INSERT INTO %s (id, name, cpu_cores, ram_gb, updated_at)
-            VALUES (:id, :name, :cpu_cores, :ram_gb, CURRENT_TIMESTAMP)
+	query := `INSERT INTO %s (id, name, cpu_cores, ram_gb, safe_boundary, updated_at)
+            VALUES (:id, :name, :cpu_cores, :ram_gb, :safe_boundary, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET 
-            cpu_cores=excluded.cpu_cores, ram_gb=excluded.ram_gb, updated_at=CURRENT_TIMESTAMP`
+            cpu_cores=excluded.cpu_cores, ram_gb=excluded.ram_gb, safe_boundary=excluded.safe_boundary, updated_at=CURRENT_TIMESTAMP`
 	query = fmt.Sprintf(query, r.table)
 
 	_, err := r.db.NamedExecContext(ctx, query, n)
@@ -33,7 +33,7 @@ func (r *nodeRepo) UpsertNode(ctx context.Context, n domain.Node) error {
 
 func (r *nodeRepo) GetAllNodes(ctx context.Context) ([]domain.Node, error) {
 	var nodes []domain.Node
-	query := `SELECT id, name, cpu_cores, ram_gb, updated_at FROM %s`
+	query := `SELECT id, name, cpu_cores, ram_gb, safe_boundary, updated_at FROM %s`
 	query = fmt.Sprintf(query, r.table)
 
 	err := r.db.SelectContext(ctx, &nodes, query)
@@ -42,7 +42,7 @@ func (r *nodeRepo) GetAllNodes(ctx context.Context) ([]domain.Node, error) {
 
 func (r *nodeRepo) GetNodeByID(ctx context.Context, id string) (*domain.Node, error) {
 	var node domain.Node
-	query := `SELECT id, name, cpu_cores, ram_gb, updated_at FROM %s WHERE id = $1`
+	query := `SELECT id, name, cpu_cores, ram_gb, safe_boundary, updated_at FROM %s WHERE id = $1`
 	query = fmt.Sprintf(query, r.table)
 
 	err := r.db.GetContext(ctx, &node, query, id)
@@ -50,4 +50,12 @@ func (r *nodeRepo) GetNodeByID(ctx context.Context, id string) (*domain.Node, er
 		return nil, err
 	}
 	return &node, nil
+}
+
+func (r *nodeRepo) UpdateNode(ctx context.Context, n domain.Node) error {
+	query := `UPDATE %s SET name = :name, cpu_cores = :cpu_cores, ram_gb = :ram_gb, safe_boundary = :safe_boundary, updated_at = CURRENT_TIMESTAMP WHERE id = :id`
+	query = fmt.Sprintf(query, r.table)
+
+	_, err := r.db.NamedExecContext(ctx, query, n)
+	return err
 }

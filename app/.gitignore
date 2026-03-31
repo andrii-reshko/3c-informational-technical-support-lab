@@ -3,7 +3,7 @@ metrics.db
 metrics.db-*
 
 # Ignore exported csv files
-*.csv
+export/*.csv
 
 # Ignore log files
 *.log

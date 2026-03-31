@@ -36,7 +36,22 @@ type dashboardNodeView struct {
 }
 
 type dashboardViewData struct {
-	Nodes []dashboardNodeView
+	Nodes            []dashboardNodeView
+	InitialNodesJSON template.JS
+}
+
+type initialNode struct {
+	ID             string      `json:"id"`
+	Name           string      `json:"name"`
+	Risk           string      `json:"risk"`
+	RiskClass      string      `json:"risk_class"`
+	CPU            float64     `json:"cpu"`
+	RAM            float64     `json:"ram"`
+	Predicted      float64     `json:"predicted"`
+	PredictedLower float64     `json:"pred_lower"`
+	PredictedUpper float64     `json:"pred_upper"`
+	Horizon        int         `json:"horizon"`
+	SparkJSON      template.JS `json:"spark_json"`
 }
 
 type nodePageData struct {
@@ -63,6 +78,9 @@ type nodePageData struct {
 	QualityLowCoverage bool
 	ChartJSON          template.JS
 	NowISO             string
+	// Нові поля для попереджень
+	CoverageLow        bool
+	UpperBoundExceeded bool
 }
 
 type chartPoint struct {
@@ -145,8 +163,26 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	initialNodes := make([]initialNode, 0, len(items))
+	for _, item := range items {
+		initialNodes = append(initialNodes, initialNode{
+			ID:             item.ID,
+			Name:           item.Name,
+			Risk:           item.Risk,
+			RiskClass:      item.RiskClass,
+			CPU:            item.CPU,
+			RAM:            item.RAM,
+			Predicted:      item.Predicted,
+			PredictedLower: item.PredictedLower,
+			PredictedUpper: item.PredictedUpper,
+			Horizon:        item.Horizon,
+			SparkJSON:      item.SparkJSON,
+		})
+	}
+	initialJSON, _ := json.Marshal(initialNodes)
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = h.tmpl.ExecuteTemplate(w, "dashboard.html", dashboardViewData{Nodes: items})
+	_ = h.tmpl.ExecuteTemplate(w, "dashboard.html", dashboardViewData{Nodes: items, InitialNodesJSON: template.JS(initialJSON)})
 }
 
 func (h *Handler) NodeDetails(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +239,7 @@ func (h *Handler) NodeDetails(w http.ResponseWriter, r *http.Request) {
 		NodeName:           name,
 		CPUCores:           n.CpuCores,
 		RAMGB:              n.RamGB,
-		SafeBoundary:       100,
+		SafeBoundary:       safeBoundaryOrDefault(n.SafeBoundary),
 		CurrentCPU:         pred.CurrentCPU,
 		CurrentRAM:         pred.CurrentRAM,
 		LowerBound:         pred.LowerBound,
@@ -222,6 +258,9 @@ func (h *Handler) NodeDetails(w http.ResponseWriter, r *http.Request) {
 		QualityLowCoverage: coveragePct < 80.0,
 		ChartJSON:          template.JS(payload),
 		NowISO:             end.Format(time.RFC3339),
+		// Нові поля для попереджень
+		CoverageLow:        pred.CoverageLow,
+		UpperBoundExceeded: pred.UpperBoundExceeded,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -349,6 +388,13 @@ func normalizeCoveragePercent(v float64) float64 {
 	return v
 }
 
+func safeBoundaryOrDefault(v float64) float64 {
+	if v <= 0 {
+		return 75.0
+	}
+	return v
+}
+
 func buildPOCChartPoints(history []domain.Metric, pred *domain.ForecastResponse, now time.Time) []chartPoint {
 	start := now.Add(-1 * time.Hour)
 	filtered := make([]domain.Metric, 0, len(history))
@@ -431,8 +477,6 @@ func riskClass(risk string) string {
 	switch strings.ToLower(risk) {
 	case "critical":
 		return "text-bg-danger"
-	case "warning":
-		return "text-bg-warning"
 	default:
 		return "text-bg-success"
 	}

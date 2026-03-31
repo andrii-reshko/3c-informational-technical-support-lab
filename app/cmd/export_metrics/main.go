@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -101,8 +102,7 @@ func main() {
 		Step:  stepDuration,
 	}
 
-	var allPoints []DataPoint
-
+	containerPoints := make(map[string][]DataPoint)
 	for _, container := range containers {
 		fmt.Printf("Fetching: %s ...\n", container)
 
@@ -148,41 +148,50 @@ func main() {
 			}
 		}
 
+		var points []DataPoint
 		for _, dp := range dataMap {
-			allPoints = append(allPoints, *dp)
+			points = append(points, *dp)
+		}
+		if len(points) > 0 {
+			containerPoints[container] = append(containerPoints[container], points...)
 		}
 	}
 
-	if len(allPoints) == 0 {
+	if len(containerPoints) == 0 {
 		fmt.Println("No data found")
 		os.Exit(1)
 	}
 
-	sort.Slice(allPoints, func(i, j int) bool {
-		if allPoints[i].Timestamp != allPoints[j].Timestamp {
-			return allPoints[i].Timestamp < allPoints[j].Timestamp
+	if _, err := os.Stat("export"); os.IsNotExist(err) {
+		err = os.Mkdir("export", 0755)
+		if err != nil {
+			fmt.Printf("Error creating export directory: %v\n", err)
+			os.Exit(1)
 		}
-		return allPoints[i].Container < allPoints[j].Container
-	})
-
-	firstTs := allPoints[0].Timestamp
-
-	outputName := fmt.Sprintf("my_macbook_docker_cpu_mem_%s.csv", time.Now().Format("2006-01-02"))
-	file, err := os.Create(outputName)
-	if err != nil {
-		fmt.Printf("Error creating file: %v\n", err)
-		os.Exit(1)
-	}
-	defer file.Close()
-
-	fmt.Fprintf(file, "timestamp,container,cpu_usage,assigned_mem\n")
-
-	for _, dp := range allPoints {
-		relativeTs := dp.Timestamp - firstTs
-		safeName := strings.ReplaceAll(dp.Container, ",", "_")
-		fmt.Fprintf(file, "%d,%s,%.8f,%.1f\n", relativeTs, safeName, dp.CPUUsage, dp.AssignedMem)
 	}
 
-	fmt.Printf("\nCSV written to %s (%d rows)\n", outputName, len(allPoints))
+	for container, points := range containerPoints {
+		sort.Slice(points, func(i, j int) bool {
+			return points[i].Timestamp < points[j].Timestamp
+		})
+		if len(points) == 0 {
+			continue
+		}
+		firstTs := points[0].Timestamp
+		safeName := strings.ReplaceAll(container, ",", "_")
+		outputName := fmt.Sprintf("my_macbook_docker_cpu_mem_%s_%s.csv", safeName, time.Now().Format("2006-01-02"))
+		file, err := os.Create(path.Join("export", outputName))
+		if err != nil {
+			fmt.Printf("Error creating file for %s: %v\n", container, err)
+			continue
+		}
+		defer file.Close()
+		fmt.Fprintf(file, "timestamp,container,cpu_usage,assigned_mem\n")
+		for _, dp := range points {
+			relativeTs := dp.Timestamp - firstTs
+			fmt.Fprintf(file, "%d,%s,%.8f,%.1f\n", relativeTs, safeName, dp.CPUUsage, dp.AssignedMem)
+		}
+		fmt.Printf("CSV written to %s (%d rows)\n", outputName, len(points))
+	}
 	fmt.Printf("Time range: %s to %s\n", start.Format(time.RFC3339), end.Format(time.RFC3339))
 }

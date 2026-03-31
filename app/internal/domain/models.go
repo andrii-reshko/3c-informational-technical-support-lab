@@ -5,11 +5,12 @@ import (
 )
 
 type Node struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	CpuCores  float64   `db:"cpu_cores"`
-	RamGB     float64   `db:"ram_gb"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID           string    `db:"id"`
+	Name         string    `db:"name"`
+	CpuCores     float64   `db:"cpu_cores"`
+	RamGB        float64   `db:"ram_gb"`
+	SafeBoundary float64   `db:"safe_boundary"`
+	UpdatedAt    time.Time `db:"updated_at"`
 }
 
 type Metric struct {

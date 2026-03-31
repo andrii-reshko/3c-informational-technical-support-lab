@@ -55,6 +55,10 @@ type ForecastResponse struct {
 
 	// Метрики якості для детального перегляду (Node Details)
 	Quality ModelQuality `json:"quality"`
+
+	// Додано для UI попереджень
+	CoverageLow        bool    `json:"coverage_low"`        // Coverage < 80%
+	UpperBoundExceeded bool    `json:"upper_bound_exceeded"`// Upper > 100%
 }
 
 type ModelQuality struct {

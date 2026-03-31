@@ -9,6 +9,7 @@ type NodeRepository interface {
 	UpsertNode(ctx context.Context, node Node) error
 	GetAllNodes(ctx context.Context) ([]Node, error)
 	GetNodeByID(ctx context.Context, id string) (*Node, error)
+	UpdateNode(ctx context.Context, node Node) error
 }
 
 type MetricsRepository interface {
