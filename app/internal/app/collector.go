@@ -76,7 +76,7 @@ func (s *CollectorService) Backfill(ctx context.Context) {
 
 	nodes, err := s.nodes.GetAllNodes(ctx)
 	if err != nil {
-		logrus.Errorf("service: failed to get nodes: %v")
+		logrus.Errorf("service: failed to get nodes: %v", err)
 		return
 	}
 
