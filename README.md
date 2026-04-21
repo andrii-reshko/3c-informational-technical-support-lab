@@ -9,3 +9,6 @@
 
 ## Документація:
 * [Terms of reference / Технічне завдання](docs/terms-of-reference.md)
+* [User documentation / Інструкція користувача](docs/user/index.md)
+* [Technical documentation / Технічна документація](docs/tech/index.md)
+* [Presentation / Презентація](docs/marketing/presentation.pdf)
