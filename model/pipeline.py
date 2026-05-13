@@ -67,7 +67,7 @@ def run_all():
     df = load_trace_data()
 
     # Config model(s) characteristics
-    target_resources = ['cpu_usage']
+    target_resources = ['cpu_usage', 'ram_usage']
     horizons_minutes = [15]
 
     for resource in target_resources:
