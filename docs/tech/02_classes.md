@@ -12,11 +12,22 @@ classDiagram
     }
     
     class ForecasterService {
-        +GetForecast(nodeID, horizon) ForecastResult
+        +GetForecast(nodeID, horizon) ForecastResponse
+        +cpuModel TFLiteModel
+        +ramModel TFLiteModel
+        +predictResource() resourcePrediction
+    }
+    
+    class resourcePrediction {
+        +current float64
+        +lower float64
+        +upper float64
+        +predicted float64
+        +quality ModelQuality
     }
     
     class FeatureEngineer {
-        +BuildFeatures(metrics, time) FeatureVector
+        +PrepareVector(metrics, isRAM) FeatureVector
     }
     
     class TFLiteModel {
@@ -42,6 +53,7 @@ classDiagram
     ForecasterService --> FeatureEngineer
     ForecasterService --> TFLiteModel
     ForecasterService --> MetricsRepo
+    ForecasterService --> resourcePrediction
 
     CollectorService --> MetricsRepo
     RestAPI --> ForecasterService

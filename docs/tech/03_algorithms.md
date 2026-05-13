@@ -14,15 +14,28 @@ flowchart TD
 
     C --> D{"Чи достатньо метрик \n для вікна?"}
     D -- Ні --> Error2[/"Повернення помилки \n 'Not enough data'"/]
-    D -- Так --> E["Feature Engineer: \n нормалізація, додавання лагів, \n rolling mean"]
+    D -- Так --> E["Feature Engineer: \n нормалізація, додавання лагів, \n rolling mean для CPU та RAM"]
 
-    E --> F["Inference: \n Виклик TFLite(features)"]
-    F --> G["Генерація квантильного\n прогнозу: lower_bound, upper_bound"]
+    E --> F1["Inference CPU: \n TFLite(features, isRAM=false)"]
+    E --> F2["Inference RAM: \n TFLite(features, isRAM=true)"]
+
+    F1 --> G1["CPU квантильний прогноз: \n cpu_lower, cpu_upper"]
+    F2 --> G2["RAM квантильний прогноз: \n ram_lower, ram_upper"]
     
-    G --> H["Визначення risk_status \n SAFE, WARNING, CRITICAL \n відповідно до prediction \n та hardware-limits"]
+    G1 --> H["Визначення risk_status \n SAFE, WARNING, CRITICAL \n відповідно до max(cpu_upper, ram_upper) \n та hardware-limits"]
 
-    H --> I[/"Формування JSON відповіді"/]
+    H --> I[/"Формування JSON відповіді \n CPU + RAM forecast"/]
     Error1 --> J([Кінець])
     Error2 --> J
     I --> J
 ```
+
+### Опис кроків:
+1. **Отримання метрик** - запит останніх 61 метрики для формування вікон та лагів
+2. **Feature Engineering** - для кожного ресурсу (CPU/RAM) обчислюються:
+   - Лаги (lag1, lag2, lag3, lag5, lag10, lag15, lag30)
+   - Rolling statistics (mean/max для вікон 5, 15, 60 хв)
+   - Часові ознаки (година, день тижня)
+   - Нормалізація через MinMaxScaler
+3. **Inference** - паралельне виконання для CPU та RAM моделей
+4. **Визначення ризику** - максимальний upper bound з обох ресурсів порівнюється з SafeBoundary

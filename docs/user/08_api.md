@@ -11,16 +11,46 @@
     ```json
     {
        "node_id": "test-node-01",
-       "current_cpu": 15.5,
-       "forecast": {
-          "lower_bound": 10.2,
-          "upper_bound": 25.8,
-          "horizon_min": 15
+       "horizon_minutes": 15,
+       "cpu_current_percent": 15.5,
+       "cpu_lower_bound": 10.2,
+       "cpu_upper_bound": 25.8,
+       "cpu_predicted_peak": 25.8,
+       "cpu_quality": {
+          "mae": 2.71,
+          "coverage": 0.848
        },
-       "risk_status": "SAFE"
+       "ram_current_percent": 42.3,
+       "ram_lower_bound": 35.0,
+       "ram_upper_bound": 55.0,
+       "ram_predicted_peak": 55.0,
+       "ram_quality": {
+          "mae": 0.73,
+          "coverage": 0.791
+       },
+       "risk_level": "safe",
+       "headroom_percent": 44.7,
+       "coverage_low": false,
+       "upper_bound_exceeded": false
     }
     ```
 
 ### WebSocket підключення:
 `WS /ws`
 *   **Опис:** Використовується UI-застосунком для отримання метрик та прогнозів для дашборду у режимі реального часу. Дані надсилаються автоматично в форматі JSON.
+*   **Параметри:**
+    *   `node_id` (string, опціонально) - для стріму конкретного вузла
+    *   `interval_sec` (int, опціонально) - інтервал оновлення (за замовчуванням 2 сек)
+*   **Формат повідомлення:**
+    ```json
+    {
+       "timestamp": "2026-05-13T08:55:00Z",
+       "cpu": 15.5,
+       "ram": 42.3,
+       "cpu_lower": 10.2,
+       "cpu_upper": 25.8,
+       "ram_lower": 35.0,
+       "ram_upper": 55.0,
+       "now_iso": "2026-05-13T08:55:00Z"
+    }
+    ```
