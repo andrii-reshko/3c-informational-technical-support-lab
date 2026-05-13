@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/andrii-reshko/3c-informational-technical-support-lab/app/internal/domain"
@@ -13,7 +14,25 @@ import (
 )
 
 type PrometheusAdapter struct {
-	api v1.API
+	api     v1.API
+	limiter MemLimiter
+}
+
+type MemLimiter struct {
+	mu     sync.RWMutex
+	limits map[string]int64
+}
+
+func (l *MemLimiter) Get(nodeID string) int64 {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.limits[nodeID]
+}
+
+func (l *MemLimiter) Set(nodeID string, limit int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.limits[nodeID] = limit
 }
 
 // NewAdapter створює новий екземпляр адаптера.
@@ -28,12 +47,14 @@ func NewAdapter(url string) (*PrometheusAdapter, error) {
 
 	return &PrometheusAdapter{
 		api: v1.NewAPI(client),
+		limiter: MemLimiter{
+			limits: make(map[string]int64),
+		},
 	}, nil
 }
 
 // GetHardwareFrames дістає ліміти контейнерів для формування Hardware Profile
 func (a *PrometheusAdapter) GetHardwareFrames(ctx context.Context) ([]domain.Node, error) {
-	// Запит ліміту пам'яті як базової метрики "існування" вузла
 	val, _, err := a.api.Query(ctx, "docker_container_mem_limit", time.Now())
 	if err != nil {
 		return nil, err
@@ -51,11 +72,14 @@ func (a *PrometheusAdapter) GetHardwareFrames(ctx context.Context) ([]domain.Nod
 			continue
 		}
 
+		limitBytes := int64(sample.Value)
+		a.limiter.Set(name, limitBytes)
+
 		nodes = append(nodes, domain.Node{
 			ID:       name,
 			Name:     name,
-			CpuCores: 1.0, // Для MVP ставимо 1.0, або можна додати метрику n_cpus
-			RamGB:    float64(sample.Value) / 1024 / 1024 / 1024,
+			CpuCores: 1.0,
+			RamGB:    float64(limitBytes) / 1024 / 1024 / 1024,
 		})
 	}
 
@@ -100,6 +124,7 @@ func (a *PrometheusAdapter) GetLatestMetrics(ctx context.Context) ([]domain.Metr
 		name := string(s.Metric["container_name"])
 		if m, ok := metricsMap[name]; ok {
 			m.RAMBytes = int64(s.Value)
+			m.RAMPercent = float64(s.Value) / float64(a.limiter.Get(name)) * 100.0
 		}
 	}
 
@@ -178,12 +203,19 @@ func (a *PrometheusAdapter) GetRangeMetrics(ctx context.Context, nodeID string, 
 				ts := sample.Timestamp.Time().Unix()
 				if m, exists := dataMap[ts]; exists {
 					m.RAMBytes = int64(sample.Value)
+					if limit := a.limiter.Get(nodeID); limit > 0 {
+						m.RAMPercent = float64(sample.Value) / float64(limit) * 100.0
+					}
 				} else {
-					// Якщо раптом для цього TS немає CPU, створюємо новий запис
+					ramPct := 0.0
+					if limit := a.limiter.Get(nodeID); limit > 0 {
+						ramPct = float64(sample.Value) / float64(limit) * 100.0
+					}
 					dataMap[ts] = &domain.Metric{
-						NodeID:    nodeID,
-						Timestamp: sample.Timestamp.Time(),
-						RAMBytes:  int64(sample.Value),
+						NodeID:     nodeID,
+						Timestamp:  sample.Timestamp.Time(),
+						RAMBytes:   int64(sample.Value),
+						RAMPercent: ramPct,
 					}
 				}
 			}

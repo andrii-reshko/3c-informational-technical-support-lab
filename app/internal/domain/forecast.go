@@ -40,25 +40,30 @@ type ForecastResponse struct {
 	Timestamp  time.Time `json:"timestamp"`
 	HorizonMin int       `json:"horizon_minutes"` // MVP: 15 хв
 
-	// Поточні значення
-	CurrentCPU float64 `json:"current_cpu_percent"`
-	CurrentRAM float64 `json:"current_ram_percent"`
+	// CPU Forecast
+	CPUCurrent    float64      `json:"cpu_current_percent"`
+	CPULowerBound float64      `json:"cpu_lower_bound"`
+	CPUUpperBound float64      `json:"cpu_upper_bound"`
+	CPUPredicted  float64      `json:"cpu_predicted_peak"`
+	CPUQuality    ModelQuality `json:"cpu_quality"`
 
-	// Інтервальний прогноз (Quantile Regression 0.1 та 0.9)
-	LowerBound float64 `json:"lower_bound"`    // q0.1
-	UpperBound float64 `json:"upper_bound"`    // q0.9
-	Predicted  float64 `json:"predicted_peak"` // Очікуваний пік
+	// RAM Forecast
+	RAMCurrent    float64      `json:"ram_current_percent"`
+	RAMLowerBound float64      `json:"ram_lower_bound"`
+	RAMUpperBound float64      `json:"ram_upper_bound"`
+	RAMPredicted  float64      `json:"ram_predicted_peak"`
+	RAMQuality    ModelQuality `json:"ram_quality"`
 
-	// Аналіз ризиків для Dashboard
+	// Combined risk assessment
 	RiskLevel string  `json:"risk_level"` // safe | warning | critical
 	Headroom  float64 `json:"headroom_percent"`
 
-	// Метрики якості для детального перегляду (Node Details)
+	// Метрики якості (дефолтні, якщо CPU/RAM quality недоступні)
 	Quality ModelQuality `json:"quality"`
 
 	// Додано для UI попереджень
-	CoverageLow        bool    `json:"coverage_low"`        // Coverage < 80%
-	UpperBoundExceeded bool    `json:"upper_bound_exceeded"`// Upper > 100%
+	CoverageLow        bool `json:"coverage_low"`         // Coverage < 80%
+	UpperBoundExceeded bool `json:"upper_bound_exceeded"` // Upper > 100%
 }
 
 type ModelQuality struct {

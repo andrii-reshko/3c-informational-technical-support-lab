@@ -10,7 +10,6 @@ import (
 
 	http2 "github.com/andrii-reshko/3c-informational-technical-support-lab/app/internal/adapters/http"
 	"github.com/andrii-reshko/3c-informational-technical-support-lab/app/internal/adapters/web"
-	"github.com/andrii-reshko/3c-informational-technical-support-lab/app/internal/app"
 	"github.com/andrii-reshko/3c-informational-technical-support-lab/app/internal/bootstrap"
 	log "github.com/sirupsen/logrus"
 )
@@ -21,20 +20,11 @@ func main() {
 	c := bootstrap.NewContainer()
 	log.Info("inference: boot")
 
-	// 1. Завантажуємо налаштування нормалізації (той самий JSON)
-	// modelCfgFile, _ := os.ReadFile("assets/model_config.json")
-
-	// 2. Ініціалізуємо TFLite Predictor
-	modelId := "global_trace_cpu_usage_15m"
-	ml := app.NewLoader([]string{modelId})
-	model, err := ml.Get(modelId)
+	forecaster, err := c.BuildForecaster()
 	if err != nil {
-		log.Fatalf("inference: failed to load TFLite model: %v", err)
+		log.Fatalf("inference: failed to build forecaster: %v", err)
 	}
 
-	// 3. Збираємо сервіси
-	fe := app.NewFeatureEngineer(*model.Scaler)
-	forecaster := app.NewForecasterService(c.NodeRepo, c.MetricsRepo, fe, model.Predictor, model.Meta)
 	handler := http2.NewHandler(forecaster, c.NodeRepo)
 	webHandler, err := web.NewHandler(forecaster, c.NodeRepo, c.MetricsRepo)
 	if err != nil {

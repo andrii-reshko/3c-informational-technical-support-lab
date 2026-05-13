@@ -18,4 +18,5 @@ type Metric struct {
 	Timestamp  time.Time `db:"timestamp"`
 	CPUPercent float64   `db:"cpu_usage_percent"`
 	RAMBytes   int64     `db:"ram_usage_bytes"`
+	RAMPercent float64   `db:"ram_usage_percent"`
 }
