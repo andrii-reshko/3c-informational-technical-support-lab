@@ -13,8 +13,7 @@ func NewFeatureEngineer(cfg domain.ModelConfig) *FeatureEngineer {
 	return &FeatureEngineer{cfg: cfg}
 }
 
-func (fe *FeatureEngineer) PrepareVector(metrics []domain.Metric) []float32 {
-	// Для вікна 60 хв та лага 30 нам потрібно мінімум 61 метрика
+func (fe *FeatureEngineer) PrepareVector(metrics []domain.Metric, isRAM bool) []float32 {
 	const minRequired = 61
 	if len(metrics) < minRequired {
 		log.Warnf("feature engineer: not enough data (%d/%d)", len(metrics), minRequired)
@@ -23,26 +22,31 @@ func (fe *FeatureEngineer) PrepareVector(metrics []domain.Metric) []float32 {
 
 	n := len(metrics)
 	current := metrics[n-1]
-	raw := make([]float64, len(fe.cfg.Features)) // Має бути 16 згідно domain
+	raw := make([]float64, len(fe.cfg.Features))
 
-	// --- 1. Поточне значення та ЛАГИ ---
-	raw[domain.IdxResource] = current.CPUPercent
-	raw[domain.IdxLag1] = metrics[n-2].CPUPercent
-	raw[domain.IdxLag2] = metrics[n-3].CPUPercent
-	raw[domain.IdxLag3] = metrics[n-4].CPUPercent
-	raw[domain.IdxLag5] = metrics[n-6].CPUPercent
-	raw[domain.IdxLag10] = metrics[n-11].CPUPercent
-	raw[domain.IdxLag15] = metrics[n-16].CPUPercent
-	raw[domain.IdxLag30] = metrics[n-31].CPUPercent
+	getValue := func(m domain.Metric) float64 {
+		if isRAM {
+			return m.RAMPercent
+		}
+		return m.CPUPercent
+	}
 
-	// --- 2. ROLLING STATISTICS (5, 15, 60 хв) ---
+	raw[domain.IdxResource] = getValue(current)
+	raw[domain.IdxLag1] = getValue(metrics[n-2])
+	raw[domain.IdxLag2] = getValue(metrics[n-3])
+	raw[domain.IdxLag3] = getValue(metrics[n-4])
+	raw[domain.IdxLag5] = getValue(metrics[n-6])
+	raw[domain.IdxLag10] = getValue(metrics[n-11])
+	raw[domain.IdxLag15] = getValue(metrics[n-16])
+	raw[domain.IdxLag30] = getValue(metrics[n-31])
+
 	calcRolling := func(window int) (float64, float64) {
 		var sum, maxVal float64
-		// Беремо останні 'window' точок
 		for i := n - window; i < n; i++ {
-			sum += metrics[i].CPUPercent
-			if metrics[i].CPUPercent > maxVal {
-				maxVal = metrics[i].CPUPercent
+			val := getValue(metrics[i])
+			sum += val
+			if val > maxVal {
+				maxVal = val
 			}
 		}
 		return sum / float64(window), maxVal
@@ -52,17 +56,11 @@ func (fe *FeatureEngineer) PrepareVector(metrics []domain.Metric) []float32 {
 	raw[domain.IdxRollingMean15], raw[domain.IdxRollingMax15] = calcRolling(15)
 	raw[domain.IdxRollingMean60], raw[domain.IdxRollingMax60] = calcRolling(60)
 
-	// --- 3. ЧАСОВІ ОЗНАКИ (UTC) ---
 	raw[domain.IdxHour] = float64(current.Timestamp.Hour())
 	raw[domain.IdxDayOfWeek] = float64(current.Timestamp.Weekday())
 
-	// --- 4. НОРМАЛІЗАЦІЯ (MinMaxScaler) ---
 	vector := make([]float32, len(raw))
 	for i := range raw {
-		// Формула sklearn: X_std = (X - X.min(axis=0)) / (X.max(axis=0) - X.min(axis=0))
-		// X_scaled = X_std * (max - min) + min
-		// Або спрощено: X * scale + min_ (де min_ це зсув, що включає віднімання мінімуму)
-		// У конфігурації Min - це саме sklearn.min_, тому віднімати DataMin ще раз не потрібно.
 		norm := raw[i]*fe.cfg.Scale[i] + fe.cfg.Min[i]
 		vector[i] = float32(norm)
 	}

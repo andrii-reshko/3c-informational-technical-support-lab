@@ -1,5 +1,5 @@
 VENV_DIR ?= .venv
-PYTHON ?= python3
+PYTHON ?= /usr/local/bin/python3.11
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_PIP := $(VENV_DIR)/bin/pip
 

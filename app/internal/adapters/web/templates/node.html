@@ -82,48 +82,78 @@
             <div class="current-load-big card-flat text-center p-3 mb-3">
                 <div class="usage-label">Current Load (CPU / RAM)</div>
                 <span :class="risk === 'CRITICAL' ? 'text-danger' : 'text-success'" x-text="currentCPU.toFixed(1) + '%'"></span> / 
-                <span class="text-secondary" x-text="currentRAM.toFixed(1) + '%'"></span>
+                <span :class="risk === 'CRITICAL' ? 'text-danger' : 'text-secondary'" x-text="currentRAM.toFixed(1) + '%'"></span>
             </div>
 
-            <div class="card card-flat p-3 mt-3">
-                <div class="usage-label mb-2">Forecast Details (<span x-text="horizon"></span>m)</div>
+            <div class="card card-flat p-3 mb-3">
+                <div class="usage-label mb-2">CPU Forecast (<span x-text="horizon"></span>m)</div>
                 <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                    <span>Predicted Peak:</span>
-                    <strong x-text="upperBound.toFixed(1) + '%'"></strong>
+                    <span>Upper Bound:</span>
+                    <strong x-text="cpuUpperBound.toFixed(1) + '%'"></strong>
                 </div>
                 <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
                     <span>Lower Bound:</span>
-                    <strong x-text="lowerBound.toFixed(1) + '%'"></strong>
+                    <strong x-text="cpuLowerBound.toFixed(1) + '%'"></strong>
                 </div>
-                <div class="d-flex justify-content-between mb-2">
+                <div class="d-flex justify-content-between">
                     <span>Headroom:</span>
-                    <strong x-text="headroom.toFixed(1) + '%'"></strong>
+                    <strong x-text="Math.max(0, 100 - cpuUpperBound).toFixed(1) + '%'"></strong>
+                </div>
+            </div>
+
+            <div class="card card-flat p-3 mb-3">
+                <div class="usage-label mb-2">RAM Forecast (<span x-text="horizon"></span>m)</div>
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span>Upper Bound:</span>
+                    <strong x-text="ramUpperBound.toFixed(1) + '%'"></strong>
+                </div>
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span>Lower Bound:</span>
+                    <strong x-text="ramLowerBound.toFixed(1) + '%'"></strong>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Headroom:</span>
+                    <strong x-text="Math.max(0, 100 - ramUpperBound).toFixed(1) + '%'"></strong>
                 </div>
             </div>
 
             <div class="card card-flat p-3 mt-3">
                 <div class="usage-label mb-2">Quality Metrics</div>
+                <div class="small text-muted mb-2">CPU</div>
                 <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
                     <span>MAE:</span>
-                    <strong x-text="qualityMAE.toFixed(3)"></strong>
+                    <strong x-text="cpuQualityMAE.toFixed(3)"></strong>
+                </div>
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span>Coverage:</span>
+                    <strong x-text="cpuQualityCoverage.toFixed(1) + '%'"></strong>
+                </div>
+                <div class="small text-muted mb-2 mt-3">RAM</div>
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span>MAE:</span>
+                    <strong x-text="ramQualityMAE.toFixed(3)"></strong>
                 </div>
                 <div class="d-flex justify-content-between">
-                    <span>Coverage:
-                    </span>
+                    <span>Coverage:</span>
                     <strong>
                         <template x-if="coverageLow">
                             <span class="me-2">⚠️</span>
                         </template>
-                        <span x-text="qualityCoverage.toFixed(1) + '%'"></span>
+                        <span x-text="ramQualityCoverage.toFixed(1) + '%'"></span>
                     </strong>
                 </div>
             </div>
         </div>
 
         <div class="col-xl-8">
-            <div class="card card-flat p-4">
-                <h3 class="h5 fw-bold m-0">Historical & Predicted Load (CPU)</h3>
-                <div class="historical-chart-container border-0" id="node-details-chart"></div>
+            <div class="card card-flat p-4 mb-3">
+                <h3 class="h5 fw-bold m-0">CPU Load Forecast</h3>
+                <div class="historical-chart-container border-0" id="cpu-chart"></div>
+            </div>
+
+            <div class="card card-flat p-4 mb-3">
+                <h3 class="h5 fw-bold m-0">RAM Load Forecast</h3>
+                <div class="historical-chart-container border-0" id="ram-chart"></div>
             </div>
 
             <div class="card card-flat p-4 mt-3">
@@ -144,7 +174,6 @@
 </div>
 
 <script>
-// alpine.js: only for node details and form.
 function nodeDetails() {
     return {
         nodeName: '{{.NodeName}}',
@@ -153,14 +182,17 @@ function nodeDetails() {
         safeBoundary: {{.SafeBoundary}},
         currentCPU: {{.CurrentCPU}},
         currentRAM: {{.CurrentRAM}},
-        lowerBound: {{.LowerBound}},
-        upperBound: {{.UpperBound}},
-        headroom: {{.Headroom}},
+        cpuLowerBound: {{.CPULowerBound}},
+        cpuUpperBound: {{.CPUUpperBound}},
+        ramLowerBound: {{.RAMLowerBound}},
+        ramUpperBound: {{.RAMUpperBound}},
         horizon: {{.Horizon}},
         risk: '{{.Risk}}',
-        qualityMAE: {{.QualityMAE}},
-        qualityCoverage: {{.QualityCoverage}},
-        coverageLow: {{if .CoverageLow}}true{{else}}false{{end}},
+        cpuQualityMAE: {{.CPUQualityMAE}},
+        cpuQualityCoverage: {{.CPUQualityCoverage}},
+        ramQualityMAE: {{.RAMQualityMAE}},
+        ramQualityCoverage: {{.RAMQualityCoverage}},
+        coverageLow: {{if .QualityLowCoverage}}true{{else}}false{{end}},
         upperBoundExceeded: {{if .UpperBoundExceeded}}true{{else}}false{{end}},
         wsConnected: false,
         wsStatus: 'WS: connecting...',
@@ -177,16 +209,15 @@ function nodeDetails() {
         },
         handleWsMessage(p) {
             this.currentCPU = p.cpu;
-            if (p.ram !== undefined) {
-                this.currentRAM = p.ram;
-            }
-            this.lowerBound = p.lower;
-            this.upperBound = p.upper;
-            this.headroom = Math.max(0, 100 - p.upper);
+            this.currentRAM = p.ram;
+            this.cpuLowerBound = p.cpu_lower;
+            this.cpuUpperBound = p.cpu_upper;
+            this.ramLowerBound = p.ram_lower;
+            this.ramUpperBound = p.ram_upper;
             
             var now = new Date();
             var timeStr = now.toLocaleTimeString();
-            var msg = `CPU: ${p.cpu.toFixed(2)}%, Lower: ${p.lower.toFixed(2)}%, Upper: ${p.upper.toFixed(2)}%`;
+            var msg = `CPU: ${p.cpu.toFixed(2)}% (${p.cpu_lower.toFixed(2)}-${p.cpu_upper.toFixed(2)}%) | RAM: ${p.ram.toFixed(2)}% (${p.ram_lower.toFixed(2)}-${p.ram_upper.toFixed(2)}%)`;
             this.logs.unshift({ time: timeStr, msg: msg });
             if (this.logs.length > 10) {
                 this.logs.pop();
@@ -199,123 +230,139 @@ function nodeDetails() {
 }
 </script>
 <script>
-// D3 + WebSocket: только для графика и логов
 (function() {
-    const initialPoints = {{.ChartJSON}};
+    const cpuInitialPoints = {{.ChartJSON}};
+    const ramInitialPoints = {{.RAMChartJSON}};
     const NODE_ID   = "{{.NodeID}}";
     const HORIZON   = {{.Horizon}};
     const SAFE_BOUNDARY = {{.SafeBoundary}};
-    let chartData = initialPoints.map(d => ({
+    
+    let cpuNowTime = new Date("{{.NowISO}}");
+    let ramNowTime = new Date("{{.NowISO}}");
+    
+    let cpuChartData = cpuInitialPoints.map(d => ({
         timestamp: new Date(d.timestamp),
-        cpuUsage: d.cpu,
-        quantileLower: d.lower,
-        quantileUpper: d.upper
+        value: d.cpu,
+        lower: d.lower,
+        upper: d.upper
     }));
-    let nowTime = new Date("{{.NowISO}}"),
-        margin = {top: 40, right: 30, bottom: 40, left: 50},
-        container = document.getElementById("node-details-chart");
-    function drawChart() {
-        container = document.getElementById("node-details-chart");
+    
+    let ramChartData = ramInitialPoints.map(d => ({
+        timestamp: new Date(d.timestamp),
+        value: d.ram,
+        lower: d.lower,
+        upper: d.upper
+    }));
+    
+    const margin = {top: 40, right: 30, bottom: 40, left: 50};
+    
+    function drawChart(containerId, chartData, nowTime, color, label) {
+        const container = document.getElementById(containerId);
         const width = container.clientWidth - margin.left - margin.right;
-        const height = 350 - margin.top - margin.bottom;
-        d3.select("#node-details-chart").selectAll("*").remove();
-        const svg = d3.select("#node-details-chart")
+        const height = 250 - margin.top - margin.bottom;
+        d3.select("#" + containerId).selectAll("*").remove();
+        
+        const svg = d3.select("#" + containerId)
           .append("svg")
           .attr("width", "100%")
           .attr("height", "100%")
           .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
           .append("g")
           .attr("transform", `translate(${margin.left},${margin.top})`);
-        const gridGroup = svg.append("g").attr("class", "grid-group");
+        
         const yScale = d3.scaleLinear().domain([-5, 110]).range([height, 0]);
+        
         svg.append("line")
           .attr("x1", 0).attr("x2", width)
           .attr("y1", yScale(SAFE_BOUNDARY)).attr("y2", yScale(SAFE_BOUNDARY))
           .attr("stroke", "#dc3545").attr("stroke-dasharray", "4,4").attr("stroke-width", 1);
-
-        const quantileAreaGroup = svg.append("g").attr("class", "quantile-area");
-        const pathGroup = svg.append("g").attr("class", "path");
-        const axesGroup = svg.append("g").attr("class", "axes");
-        const markerGroup = svg.append("g").attr("class", "markers");
+        
         const xScale = d3.scaleTime().range([0, width]);
         xScale.domain([
             new Date(nowTime.getTime() - 60 * 60 * 1000),
             new Date(nowTime.getTime() + HORIZON * 60 * 1000)
         ]);
-        const lineGenerator = d3.line()
-          .x(d => xScale(d.timestamp))
-          .y(d => yScale(d.cpuUsage));
+        
         const areaGenerator = d3.area()
           .x(d => xScale(d.timestamp))
-          .y0(d => yScale(d.quantileLower))
-          .y1(d => yScale(d.quantileUpper));
-        const quantileArea = quantileAreaGroup.selectAll(".quantile-path").data([chartData]);
-        quantileArea.enter().append("path").attr("class", "quantile-path")
-          .merge(quantileArea)
+          .y0(d => yScale(d.lower))
+          .y1(d => yScale(d.upper))
+          .curve(d3.curveMonotoneX);
+        
+        svg.append("path")
+          .datum(chartData)
           .attr("d", areaGenerator)
-          .attr("fill", "#0d6efd")
+          .attr("fill", color)
           .attr("opacity", 0.15);
-        quantileArea.exit().remove();
-        const historyOnly = chartData.filter(d => d.timestamp <= nowTime);
-        const historicalPath = pathGroup.selectAll(".historical-path").data([historyOnly]);
-        historicalPath.enter().append("path").attr("class", "historical-path")
-          .merge(historicalPath)
+        
+        const lineGenerator = d3.line()
+          .x(d => xScale(d.timestamp))
+          .y(d => yScale(d.value))
+          .curve(d3.curveMonotoneX);
+        
+        svg.append("path")
+          .datum(chartData)
           .attr("d", lineGenerator)
           .attr("fill", "none")
-          .attr("stroke", "#0d6efd")
+          .attr("stroke", color)
           .attr("stroke-width", 2.5);
-        historicalPath.exit().remove();
-        const forecastOnly = chartData.filter(d => d.timestamp >= nowTime);
-        const lowerLineGen = d3.line()
-            .x(d => xScale(d.timestamp))
-            .y(d => yScale(d.quantileLower))
-            .curve(d3.curveMonotoneX);
-        const upperLineGen = d3.line()
-            .x(d => xScale(d.timestamp))
-            .y(d => yScale(d.quantileUpper))
-            .curve(d3.curveMonotoneX);
-        const lowerPath = pathGroup.selectAll(".forecast-lower-path").data([forecastOnly]);
-        lowerPath.enter().append("path").attr("class", "forecast-lower-path")
-            .merge(lowerPath)
-            .attr("d", lowerLineGen)
-            .attr("fill", "none")
-            .attr("stroke", "#0d6efd")
-            .attr("stroke-width", 1)
-            .attr("stroke-dasharray", "2,2");
-        lowerPath.exit().remove();
-        const upperPath = pathGroup.selectAll(".forecast-upper-path").data([forecastOnly]);
-        upperPath.enter().append("path").attr("class", "forecast-upper-path")
-            .merge(upperPath)
-            .attr("d", upperLineGen)
-            .attr("fill", "none")
-            .attr("stroke", "#0d6efd")
-            .attr("stroke-width", 1)
-            .attr("stroke-dasharray", "2,2");
-        upperPath.exit().remove();
+        
         const xAxis = d3.axisBottom(xScale).ticks(d3.timeMinute.every(15)).tickFormat(d3.timeFormat("%H:%M"));
         const yAxis = d3.axisLeft(yScale).ticks(5);
         const yGrid = d3.axisLeft(yScale).tickSize(-width).tickFormat('').ticks(5);
-        gridGroup.call(yGrid).selectAll("line").attr("stroke", "#e9ecef").attr("stroke-dasharray", "2,2");
-        gridGroup.select(".domain").remove();
-        axesGroup.selectAll(".x-axis").data([null]).enter().append("g").attr("class", "x-axis");
-        axesGroup.selectAll(".y-axis").data([null]).enter().append("g").attr("class", "y-axis");
-        axesGroup.select(".x-axis").attr("transform", `translate(0,${height})`).call(xAxis);
-        axesGroup.select(".y-axis").call(yAxis);
-        const nowMarker = markerGroup.selectAll(".now-marker").data([nowTime]);
-        nowMarker.enter().append("line").attr("class", "now-marker")
+        
+        svg.append("g").call(yGrid).selectAll("line").attr("stroke", "#e9ecef").attr("stroke-dasharray", "2,2");
+        svg.append("g").call(yGrid).select(".domain").remove();
+        svg.append("g").attr("transform", `translate(0,${height})`).call(xAxis);
+        svg.append("g").call(yAxis);
+        
+        svg.append("line")
           .attr("stroke", "#212529").attr("stroke-width", 1)
-          .merge(nowMarker)
           .attr("x1", xScale(nowTime)).attr("y1", yScale(100))
           .attr("x2", xScale(nowTime)).attr("y2", yScale(0));
-        const nowText = markerGroup.selectAll(".now-text").data([nowTime]);
-        nowText.enter().append("text").attr("class", "now-text")
+        
+        svg.append("text")
           .attr("fill", "#212529").style("font-size", "10px").style("font-weight", "600").attr("text-anchor", "middle")
-          .merge(nowText)
           .attr("x", xScale(nowTime)).attr("y", height + 30)
           .text("CURRENT TIME");
     }
-    drawChart();
-    window.addEventListener('resize', drawChart);
+    
+    function updateChartData(chartData, nowTime, p, isCPU) {
+        chartData = chartData.filter(d => d.timestamp < nowTime);
+        chartData.push({
+            timestamp: nowTime,
+            value: isCPU ? p.cpu : p.ram,
+            lower: isCPU ? p.cpu : p.ram,
+            upper: isCPU ? p.cpu : p.ram
+        });
+        var steps = [
+          { min: HORIZON / 3,     frac: 1/3 },
+          { min: 2 * HORIZON / 3, frac: 2/3 },
+          { min: HORIZON,          frac: 1   }
+        ];
+        var lower = isCPU ? p.cpu_lower : p.ram_lower;
+        var upper = isCPU ? p.cpu_upper : p.ram_upper;
+        var current = isCPU ? p.cpu : p.ram;
+        steps.forEach(function(s) {
+          chartData.push({
+            timestamp: new Date(nowTime.getTime() + s.min * 60000),
+            value: current + (upper - current) * s.frac,
+            lower: current + (lower - current) * s.frac,
+            upper: current + (upper - current) * s.frac
+          });
+        });
+        var cutoff = new Date(nowTime.getTime() - 65 * 60000);
+        return chartData.filter(d => d.timestamp > cutoff);
+    }
+    
+    drawChart("cpu-chart", cpuChartData, cpuNowTime, "#0d6efd", "CPU");
+    drawChart("ram-chart", ramChartData, ramNowTime, "#6f42c1", "RAM");
+    
+    window.addEventListener('resize', function() {
+        drawChart("cpu-chart", cpuChartData, cpuNowTime, "#0d6efd", "CPU");
+        drawChart("ram-chart", ramChartData, ramNowTime, "#6f42c1", "RAM");
+    });
+    
     var wsProto = location.protocol === "https:" ? "wss" : "ws";
     var ws = new WebSocket(wsProto + "://" + location.host + "/ws?node_id=" + encodeURIComponent(NODE_ID) + "&interval_sec=2");
     
@@ -334,31 +381,16 @@ function nodeDetails() {
         
         window.dispatchEvent(new CustomEvent('ws-message', { detail: p }));
 
-        nowTime = new Date(p.now_iso || p.timestamp);
-        chartData = chartData.filter(d => d.timestamp < nowTime);
-        chartData.push({
-            timestamp: nowTime,
-            cpuUsage: p.cpu,
-            quantileLower: p.cpu,
-            quantileUpper: p.cpu
-        });
-        var steps = [
-          { min: HORIZON / 3,     frac: 1/3 },
-          { min: 2 * HORIZON / 3, frac: 2/3 },
-          { min: HORIZON,          frac: 1   }
-        ];
-        steps.forEach(function(s) {
-          chartData.push({
-            timestamp: new Date(nowTime.getTime() + s.min * 60000),
-            cpuUsage:   p.cpu,
-            quantileLower: p.cpu + (p.lower - p.cpu) * s.frac,
-            quantileUpper: p.cpu + (p.upper - p.cpu) * s.frac
-          });
-        });
-        var cutoff = new Date(nowTime.getTime() - 65 * 60000);
-        chartData = chartData.filter(d => d.timestamp > cutoff);
+        var newNowTime = new Date(p.now_iso || p.timestamp);
         
-        drawChart();
+        cpuNowTime = newNowTime;
+        ramNowTime = newNowTime;
+        
+        cpuChartData = updateChartData(cpuChartData, newNowTime, p, true);
+        ramChartData = updateChartData(ramChartData, newNowTime, p, false);
+        
+        drawChart("cpu-chart", cpuChartData, cpuNowTime, "#0d6efd", "CPU");
+        drawChart("ram-chart", ramChartData, ramNowTime, "#6f42c1", "RAM");
     };
 })();
 </script>

@@ -12,8 +12,9 @@
         .sparkline { width: 100%; height: 50px; overflow: hidden; }
         .node-card-body { padding: 1rem; }
         .metric-value { font-size: 1.1rem; font-weight: 700; }
-        .metric-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-label { font-size: 0.7rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; }
         .node-name { font-size: 1.1rem; font-weight: 700; margin: 0; color: #212529; }
+        .pred-label { font-size: 0.6rem; color: #adb5bd; }
     </style>
 </head>
 <body>
@@ -35,19 +36,32 @@
                         <span class="status-badge" :class="node.risk === 'CRITICAL' ? 'status-critical' : 'status-safe'" x-text="node.risk"></span>
                     </div>
                     <div class="node-card-body">
-                        <div class="row align-items-end mb-3">
-                            <div class="col-4 border-end">
-                                <div class="metric-label">CPU</div>
-                                <div class="metric-value text-body" x-text="node.cpu.toFixed(0) + '%'"></div>
+                        <div class="row mb-2">
+                            <div class="col-6 border-end">
+                                <div class="metric-label d-flex align-items-center gap-1">
+                                    <span>CPU</span>
+                                    <i style="display: block; width: 5px; height: 5px; border-radius: 2px; background-color: #0d6efd;"></i>
+                                </div>
+                                <div class="metric-value d-flex align-items-center flex-nowrap gap-1">
+                                    <div class="current-value text-body" x-text="node.cpu.toFixed(0) + '%'"></div>
+                                    <div> → </div>
+                                    <div class="pred-value text-muted fw-normal"><span x-text="node.cpu_pred_lower.toFixed(0) + '-' + node.cpu_pred_upper.toFixed(0) + '%'"></span></div>
+                                </div>
                             </div>
-                            <div class="col-4 border-end text-center">
-                                <div class="metric-label">Pred (<span x-text="node.horizon"></span>m)</div>
-                                <div class="metric-value text-body" x-text="node.pred_lower.toFixed(0) + '-' + node.pred_upper.toFixed(0) + '%'"></div>
+                            <div class="col-6">
+                                <div class="metric-label d-flex align-items-center gap-1">
+                                    <span>RAM</span>
+                                    <i style="display: block; width: 5px; height: 5px; border-radius: 2px; background-color: #6f42c1;"></i>
+                                </div>
+                                <div class="metric-value d-flex align-items-center flex-nowrap gap-1">
+                                    <div class="current-value text-body" x-text="node.ram.toFixed(0) + '%'"></div>
+                                    <div> → </div>
+                                    <div class="pred-value text-muted fw-normal"><span x-text="node.ram_pred_lower.toFixed(0) + '-' + node.ram_pred_upper.toFixed(0) + '%'"></span></div>
+                                </div>
                             </div>
-                            <div class="col-4 text-end">
-                                <div class="metric-label">RAM</div>
-                                <div class="metric-value text-body" x-text="node.ram.toFixed(0) + '%'"></div>
-                            </div>
+                        </div>
+                        <div class="text-center mb-1 small">
+                            <small class="text-muted">Horizon: <span x-text="node.horizon"></span>m</small>
                         </div>
                         <div class="sparkline" :id="'spark-' + node.id" x-init="initSparkline($el, node)"></div>
                     </div>
@@ -71,6 +85,7 @@ function dashboard() {
         
         init() {
             this.connectWebSocket();
+            window.addEventListener('resize', () => this.redrawAllSparklines());
         },
 
         async connectWebSocket() {
@@ -97,6 +112,8 @@ function dashboard() {
                         const idx = this.nodes.findIndex(node => node.id === n.id);
                         if (idx >= 0) {
                             this.nodes[idx] = { ...this.nodes[idx], ...n };
+                            const el = document.getElementById('spark-' + n.id);
+                            if (el) this.redrawSparkline(el, this.nodes[idx]);
                         } else {
                             this.nodes.push(n);
                         }
@@ -106,26 +123,50 @@ function dashboard() {
         },
 
         initSparkline(el, node) {
-            const width = el.clientWidth || el.offsetWidth || 100;
-            const height = 50;
             let data = [];
             try {
                 data = typeof node.spark_json === 'string' ? JSON.parse(node.spark_json) : (node.sparkData || []);
             } catch(e) { data = []; }
             if (!data || data.length < 2) return;
 
-            const parsed = data.map(d => ({ timestamp: new Date(d.timestamp), value: d.cpu }));
+            el.dataset.nodeId = node.id;
+            this.drawSparkline(el, data);
+        },
+
+        drawSparkline(el, data) {
+            const width = el.clientWidth || el.offsetWidth || 100;
+            const height = 50;
+
+            d3.select(el).selectAll('*').remove();
+
+            const parsed = data.map(d => ({ timestamp: new Date(d.timestamp), cpu: d.cpu, ram: d.ram }));
             const x = d3.scaleTime().domain(d3.extent(parsed, d => d.timestamp)).range([0, width]);
             const y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
 
             const svg = d3.select(el).append('svg').attr('width', width).attr('height', height)
                 .attr('viewBox', `0 0 ${width} ${height}`);
             
-            const line = d3.line().x(d => x(d.timestamp)).y(d => y(d.value)).curve(d3.curveMonotoneX);
-            const area = d3.area().x(d => x(d.timestamp)).y0(height).y1(d => y(d.value)).curve(d3.curveMonotoneX);
+            const cpuLine = d3.line().x(d => x(d.timestamp)).y(d => y(d.cpu)).curve(d3.curveMonotoneX);
+            const ramLine = d3.line().x(d => x(d.timestamp)).y(d => y(d.ram)).curve(d3.curveMonotoneX);
 
-            svg.append('path').datum(parsed).attr('fill', '#e9ecef').attr('d', area);
-            svg.append('path').datum(parsed).attr('fill', 'none').attr('stroke', '#0d6efd').attr('stroke-width', 2).attr('d', line);
+            svg.append('path').datum(parsed).attr('fill', 'none').attr('stroke', '#0d6efd').attr('stroke-width', 2).attr('d', cpuLine);
+            svg.append('path').datum(parsed).attr('fill', 'none').attr('stroke', '#6f42c1').attr('stroke-width', 2).attr('d', ramLine);
+        },
+
+        redrawSparkline(el, node) {
+            let data = [];
+            try {
+                data = typeof node.spark_json === 'string' ? JSON.parse(node.spark_json) : (node.sparkData || []);
+            } catch(e) { data = []; }
+            if (data.length < 2) return;
+            this.drawSparkline(el, data);
+        },
+
+        redrawAllSparklines() {
+            this.nodes.forEach(node => {
+                const el = document.getElementById('spark-' + node.id);
+                if (el) this.redrawSparkline(el, node);
+            });
         }
     };
 }

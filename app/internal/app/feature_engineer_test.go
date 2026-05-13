@@ -53,7 +53,7 @@ func TestPrepareVector(t *testing.T) {
 			}
 
 			// Викликаємо метод, який тестуємо
-			result := fe.PrepareVector(metrics)
+			result := fe.PrepareVector(metrics, false)
 
 			// Перевіряємо результат
 			if tc.expectedNil && result != nil {

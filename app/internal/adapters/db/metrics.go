@@ -23,8 +23,8 @@ func NewMetricsRepository(db *sqlx.DB) domain.MetricsRepository {
 }
 
 func (r *metricsRepo) SaveMetrics(ctx context.Context, metrics []domain.Metric) error {
-	query := `INSERT OR IGNORE INTO %s (node_id, timestamp, cpu_usage_percent, ram_usage_bytes)
-            VALUES (:node_id, :timestamp, :cpu_usage_percent, :ram_usage_bytes)`
+	query := `INSERT OR IGNORE INTO %s (node_id, timestamp, cpu_usage_percent, ram_usage_bytes, ram_usage_percent)
+            VALUES (:node_id, :timestamp, :cpu_usage_percent, :ram_usage_bytes, :ram_usage_percent)`
 	query = fmt.Sprintf(query, r.table)
 	_, err := r.db.NamedExecContext(ctx, query, metrics)
 	return err
@@ -70,7 +70,7 @@ func (r *metricsRepo) GetLastMetricTimestamp(ctx context.Context, nodeID string)
 func (r *metricsRepo) GetRangeMetrics(ctx context.Context, nodeID string, start, end time.Time) ([]domain.Metric, error) {
 	var metrics []domain.Metric
 	query := `
-       SELECT node_id, timestamp, cpu_usage_percent, ram_usage_bytes FROM %s 
+       SELECT node_id, timestamp, cpu_usage_percent, ram_usage_bytes, ram_usage_percent FROM %s 
        WHERE node_id = $1 AND timestamp >= $2 AND timestamp <= $3 
        ORDER BY timestamp ASC`
 	query = fmt.Sprintf(query, r.table)
@@ -93,12 +93,10 @@ func (r *metricsRepo) DeleteOldMetrics(ctx context.Context, olderThan time.Time)
 func (r *metricsRepo) GetLatestMetricsForNode(ctx context.Context, nodeID string, limit int) ([]domain.Metric, error) {
 	var metrics []domain.Metric
 
-	// Використовуємо підзапит, щоб отримати останні записи, а потім відсортувати їх ASC.
-	// Це набагато швидше, ніж вигрібати всю базу і сортувати в Go.
 	query := `
-		SELECT node_id, timestamp, cpu_usage_percent, ram_usage_bytes
+		SELECT node_id, timestamp, cpu_usage_percent, ram_usage_bytes, ram_usage_percent
 		FROM (
-			SELECT node_id, timestamp, cpu_usage_percent, ram_usage_bytes
+			SELECT node_id, timestamp, cpu_usage_percent, ram_usage_bytes, ram_usage_percent
 			FROM %s
 			WHERE node_id = $1
 			ORDER BY timestamp DESC
